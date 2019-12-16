@@ -1,0 +1,6 @@
+module Pods_2048 {
+  umbrella header "Pods-2048-umbrella.h"
+
+  export *
+  module * { export * }
+}
