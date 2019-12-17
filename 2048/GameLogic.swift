@@ -84,23 +84,19 @@ class GameLogicCenter {
         for i in 0..<dimension { // for every group
             let group = groups[i]
             var busy = -1;
-            var jmp = false
+           
             for j in 0..<dimension {
                 let currentValue = numberArray.get(group[j], dimension: dimension)
                 if currentValue == 0 {
                     continue
                 }
-                if jmp {
-                    jmp = false
-                    continue
-                }
-                 
+              
                 let nextIndex = getNextNumberIndex(after: j, of: group)
                 if nextIndex > 0
                     && currentValue == numberArray.get(group[nextIndex], dimension: dimension) {
                     // 需要合并。合并后实际只占用一个格子，加一
                     busy += 1
-                    jmp = true
+                 
                     movedFlag = true
                     let newValue = currentValue * 2
                     

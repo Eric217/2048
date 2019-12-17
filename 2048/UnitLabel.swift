@@ -20,6 +20,7 @@ class UnitLabel: UILabel {
                 self.backgroundColor = UnitLabel.colorProvider.backColor(self.value)
                 self.textColor = UnitLabel.colorProvider.numberColor(self.value)
                 self.text = "\(self.value)"
+             
             }
         }
     }
@@ -30,7 +31,8 @@ class UnitLabel: UILabel {
         self.layer.masksToBounds = true
      
         self.font = UIFont(name: "HelveticaNeue-Bold", size: UIFont.preferredFont(forTextStyle: .largeTitle).fontDescriptor.pointSize)
-        // default actual 34
+        self.adjustsFontSizeToFitWidth = true
+        self.minimumScaleFactor = 0.3 // default size for that text style is 34
     }
     
     required init?(coder: NSCoder) {

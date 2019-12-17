@@ -16,6 +16,8 @@ class GameViewController: UIViewController {
     private var gameLogic = GameLogicCenter()
     private var gameUnits = Dictionary<IndexPath, UnitLabel>()
     
+    private var lastHighest: Int! // 是历史最高，不包括本局
+
     /// New game with 4 dimension
     convenience init() {
         self.init(dimension: 4)
@@ -57,19 +59,30 @@ class GameViewController: UIViewController {
     private var backPanel = UIView()
     private var backUnits = [UIView]()
     
-    private let paddingScale: CGFloat = 0.148
+    private var paddingScale: CGFloat {
+        switch self.dimension {
+        case 4: return 0.14
+        case 5: return 0.112
+        default: return 0.09
+        }
+    }
+    
     private var padding: CGFloat {
         return paddingScale * unitSize
     }
     private var cornerRadius: CGFloat {
         return padding * 0.35
     }
-    let SCREEN_W = UIScreen.main.bounds.width
-    let SCREEN_H = UIScreen.main.bounds.height
-
-    private let marginScale: CGFloat = 0.52
+   
+    private var marginScale: CGFloat {
+        switch self.dimension {
+        case 4: return 0.52
+        case 5: return 0.36
+        default: return 0.3
+        }
+    }
     private var unitSize: CGFloat {
-        return min(SCREEN_H, SCREEN_W) / ((1 + paddingScale) * CGFloat(dimension) + paddingScale + marginScale * 2)
+        return min(UIScreen.main.bounds.height, UIScreen.main.bounds.width) / ((1 + paddingScale) * CGFloat(dimension) + paddingScale + marginScale * 2)
     }
     private var panelSize: CGFloat {
         return (padding + unitSize) * CGFloat(dimension) + padding
@@ -79,12 +92,14 @@ class GameViewController: UIViewController {
         return self.gameData.dimension
     }
     
-    private var lastHighest: Int!
+    private var moveDuration: TimeInterval {
+        return 0.15
+    }
      
     override func viewDidLoad() {
         super.viewDidLoad()
         
-        lastHighest = DataSaver.highestScore(dimension)
+        refreshLastHighest()
         
         if #available(iOS 13.0, *) {
             self.view.backgroundColor = UIColor.systemGray5
@@ -136,7 +151,7 @@ class GameViewController: UIViewController {
     
     func resume() {
         func isNewGame() -> Bool {
-            return self.gameData.time == 0
+            return self.gameData.step == 0
         }
         
         if isNewGame() {
@@ -184,27 +199,69 @@ class GameViewController: UIViewController {
 //        super .viewWillTransition(to: size, with: coordinator)
 //    }
     
+    @objc func resetButtonDidClick(_ button: UIButton) {
+        let alert = UIAlertController(title: "RESET", message: "Current game will be deleted permanently.", preferredStyle: .alert)
+        let resetAction = UIAlertAction(title:"Confirm", style: .destructive, handler: { _ in
+            self.resetGame()
+        })
+        let cancelAction = UIAlertAction(title: "Cancel", style: .cancel, handler: nil)
+        
+        alert.addAction(cancelAction)
+        alert.addAction(resetAction)
+        present(alert, animated: true, completion: nil)
+    }
+    
+    private func resetGame() {
+        refreshLastHighest()
+        //TODO:  if current cached, remove it
+        self.gameData = GameData()
+        self.gameData.dimension = dimension
+        self.gameLogic.numberArray = self.gameData.numberArray
+               
+        for entry in gameUnits {
+            entry.value.removeFromSuperview()
+        }
+        gameUnits.removeAll()
+        
+        //TODO: other views
+        
+        self.resume()
+    }
+    
+    private func saveGame() {
+        
+    }
+    
+    private func refreshLastHighest() {
+        self.lastHighest = DataSaver.highestScore(dimension)
+        //TODO:  high label
+    }
     
 }
 
 // MARK: - GameLogicDelegate
 extension GameViewController: GameLogicDelegate {
-    
-    private var animateDuration: TimeInterval {
-        return 0.12
-    }
-    
+     
     func changeScore(addition: Int) {
 
         self.gameData.score += addition
-            
-        //TODO: - score label text change
+        if self.gameData.score > self.lastHighest {
+            DataSaver.updateHighestScore(gameData.score, dimension: dimension)
+            //TODO:  high label
+        }
+
+        //TODO: - score label
         
     }
-    
-    
+     
     func didPerformMove() {
         self.gameData.step += 1
+        
+        
+        
+        if gameData.step % 10 == 0 { // 虽然app退出时会保存游戏，但是以防万一，十步一存
+            self.saveGame()
+        }
     }
     
     func gameOver() {
@@ -213,33 +270,37 @@ extension GameViewController: GameLogicDelegate {
                 
         let lostView = UIAlertController(title: "Game Over", message: message, preferredStyle: .alert)
         let resetAction = UIAlertAction(title:"Try Again", style: .cancel, handler: { _ in
-            // reset
+            self.resetGame()
         })
-        let cancelAction = UIAlertAction(title: "Surrender", style: .default, handler: { _ in
+        let cancelAction = UIAlertAction(title: "Got it", style: .default, handler: nil)
+        let exitAction = UIAlertAction(title: "Exit", style: .default, handler: { _ in
+            //TODO:  if current cached, remove it
             self.dismiss(animated: false, completion: nil)
         })
-        
-        lostView.addAction(cancelAction)
         lostView.addAction(resetAction)
+        lostView.addAction(cancelAction)
+        lostView.addAction(exitAction)
         present(lostView, animated: true, completion: nil)
     }
+    
+    // required game logic
     
     func insertUnit(at location: IndexPath, with value: Int) {
         let finalFrame = backUnits.get((location.row, location.section), dimension: dimension).frame
         let unit = UnitLabel(frame: CGRect(x: finalFrame.origin.x + finalFrame.size.width/2, y: finalFrame.origin.y + finalFrame.size.height/2, width: 0, height: 0))
         unit.value = value
-        unit.layer.cornerRadius = cornerRadius
+        unit.layer.cornerRadius = finalFrame.size.width/2
         backPanel.addSubview(unit)
         gameUnits[location] = unit
         
-        UIView.animate(withDuration: animateDuration, delay: 0.0, options: .beginFromCurrentState, animations: {
+        UIView.animate(withDuration: 0.25, delay: 0.0, options: .beginFromCurrentState, animations: {
             unit.frame = finalFrame
+            unit.layer.cornerRadius = self.cornerRadius
         }, completion: { finished in
             if !finished {
                 return
             }
         })
-        
     }
     
     func moveOneUnit(from: IndexPath, to: IndexPath, value: Int) {
@@ -255,10 +316,14 @@ extension GameViewController: GameLogicDelegate {
         gameUnits.removeValue(forKey: from)
         gameUnits[to] = unit
         
-        UIView.animate(withDuration: animateDuration, delay: 0.0, options: .beginFromCurrentState, animations: {
+        if shouldPop {
+            backPanel.bringSubviewToFront(unit)
+        }
+
+        UIView.animate(withDuration: moveDuration, delay: 0.0, options: .beginFromCurrentState, animations: {
             unit.frame = finalFrame
-        }, completion: { finished in
             unit.value = value
+        }, completion: { finished in
             endUnit?.removeFromSuperview()
             if !shouldPop || !finished {
                 return
@@ -267,12 +332,12 @@ extension GameViewController: GameLogicDelegate {
     }
     
     func moveTwoUnits(from a: IndexPath, and b: IndexPath, to: IndexPath, value: Int) {
-    
+        // B 一定是最远的，让 B 变化，覆盖 A
         guard let unitA = gameUnits[a] else {
-            assert(false, "nil")
+            assert(false)
         }
         guard let unitB = gameUnits[b] else {
-            assert(false, "nil")
+            assert(false)
         }
   
         let finalFrame = backUnits[to.row * dimension + to.section].frame
@@ -281,14 +346,16 @@ extension GameViewController: GameLogicDelegate {
          
         gameUnits.removeValue(forKey: a)
         gameUnits.removeValue(forKey: b)
-        gameUnits[to] = unitA
+        gameUnits[to] = unitB
+        
+        backPanel.bringSubviewToFront(unitB)
          
-        UIView.animate(withDuration: animateDuration, delay: 0.0, options: .beginFromCurrentState, animations: {
+        UIView.animate(withDuration: moveDuration, delay: 0.0, options: .beginFromCurrentState, animations: {
             unitA.frame = finalFrame
             unitB.frame = finalFrame
+            unitB.value = value
         }, completion: { finished in
-            unitA.value = value
-            unitB.removeFromSuperview()
+            unitA.removeFromSuperview()
             if !finished {
                 return
             }
